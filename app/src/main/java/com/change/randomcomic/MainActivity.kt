@@ -11,10 +11,12 @@ import android.os.Environment
 import android.os.StrictMode
 import android.provider.Settings
 import android.text.InputType
+import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,12 +28,13 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.color.DynamicColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.slider.Slider
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.io.File
 import java.net.URLDecoder
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
@@ -49,8 +52,8 @@ class MainActivity : AppCompatActivity() {
     private val KEY_COOLDOWN_ENABLED = "cooldown_enabled"
     private val KEY_COOLDOWN_MINUTES = "cooldown_minutes"
     private val KEY_LAST_OPEN_PREFIX = "last_open_"
-    // [新增] 默认开启悬浮窗
     private val KEY_DEFAULT_FLOAT_ENABLED = "default_float_enabled"
+    private val KEY_FLOAT_SIZE = "float_size"
 
     // Default Settings
     private var targetImgPackage = "com.rookiestudio.perfectviewer"
@@ -58,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private var isCooldownEnabled = false
     private var cooldownMinutes = 60
     private var isDefaultFloatEnabled = false
+    private var floatSize = 160
 
     // State
     private var currentSelectedPath: String? = null
@@ -110,9 +114,11 @@ class MainActivity : AppCompatActivity() {
             .getString(KEY_LAST_PATH, null)
         refreshPathChips(autoSelectPath = lastPath)
 
-        // [新增] 如果设置了默认开启且已授予权限，则启动悬浮窗
         if (isDefaultFloatEnabled && Settings.canDrawOverlays(this) && !isServiceRunning(FloatingService::class.java)) {
-            startService(Intent(this, FloatingService::class.java))
+            val serviceIntent = Intent(this, FloatingService::class.java).apply {
+                putExtra(KEY_FLOAT_SIZE, floatSize)
+            }
+            startService(serviceIntent)
         }
     }
 
@@ -157,8 +163,8 @@ class MainActivity : AppCompatActivity() {
         targetVidPackage = prefs.getString(KEY_VID_PKG, targetVidPackage) ?: targetVidPackage
         isCooldownEnabled = prefs.getBoolean(KEY_COOLDOWN_ENABLED, false)
         cooldownMinutes = prefs.getInt(KEY_COOLDOWN_MINUTES, 60)
-        // [新增] 加载默认开启设置
         isDefaultFloatEnabled = prefs.getBoolean(KEY_DEFAULT_FLOAT_ENABLED, false)
+        floatSize = prefs.getInt(KEY_FLOAT_SIZE, 160)
     }
 
     // --- Chip Logic ---
@@ -454,10 +460,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun showSettingsDialog() {
         val context = this
+
+        val scrollView = ScrollView(context)
+
         val layout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(50, 40, 50, 10)
         }
+
+        scrollView.addView(layout)
 
         fun createInput(hint: String, defaultText: String, isNumber: Boolean = false): Pair<TextInputLayout, TextInputEditText> {
             val til = TextInputLayout(context).apply {
@@ -477,18 +488,73 @@ class MainActivity : AppCompatActivity() {
             return Pair(til, et)
         }
 
-        // 1. 默认开启悬浮窗开关
+        // 1. 悬浮窗大小滑块
+        val tvFloatSize = TextView(context).apply {
+            text = "悬浮窗大小: ${floatSize}px"
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
+        }
+
+        val sliderFloatSize = Slider(context).apply {
+            valueFrom = 100f // 最小 100px
+            valueTo = 300f   // 最大 300px
+            stepSize = 10f   // 步长 10px
+            value = floatSize.toFloat()
+            addOnChangeListener { _, value, _ ->
+                tvFloatSize.text = "悬浮窗大小: ${value.roundToInt()}px"
+            }
+        }
+
+        // 【修改点】 提示文本更改为 "(重启软件后生效)"
+        val tvRestartHint = TextView(context).apply {
+            text = "(重启软件后生效)"
+            textSize = 12f
+            alpha = 0.6f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.END }
+        }
+
+        // 2. 默认开启悬浮窗开关
         val switchDefaultFloat = MaterialSwitch(context).apply {
             text = "App 启动时自动开启悬浮窗"
             isChecked = isDefaultFloatEnabled
             setPadding(10, 20, 10, 20)
         }
 
-        // 包名
+        // 3. 悬浮窗开启按钮
+        val btnFloating = Button(context, null, 0, com.google.android.material.R.style.Widget_Material3_Button_TextButton).apply {
+            text = "开启/关闭 桌面悬浮窗"
+            setOnClickListener {
+                val currentSize = sliderFloatSize.value.roundToInt()
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit().putInt(KEY_FLOAT_SIZE, currentSize).apply()
+
+                if (!Settings.canDrawOverlays(context)) {
+                    Toast.makeText(context, "请先授予悬浮窗权限", Toast.LENGTH_LONG).show()
+                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                    startActivity(intent)
+                } else {
+                    val serviceIntent = Intent(context, FloatingService::class.java).apply {
+                        putExtra(KEY_FLOAT_SIZE, currentSize)
+                    }
+                    if (isServiceRunning(FloatingService::class.java)) {
+                        stopService(serviceIntent)
+                        Toast.makeText(context, "悬浮窗已关闭", Toast.LENGTH_SHORT).show()
+                    } else {
+                        stopService(serviceIntent)
+                        startService(serviceIntent)
+                        Toast.makeText(context, "悬浮窗已开启", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
+        // 4. 包名
         val (tilImg, etImg) = createInput("图片 App 包名", targetImgPackage)
         val (tilVid, etVid) = createInput("视频 App 包名", targetVidPackage)
 
-        // 冷却
+        // 5. 冷却
         val switchCooldown = MaterialSwitch(context).apply {
             text = "避免重复选中近期看过的文件夹"
             isChecked = isCooldownEnabled
@@ -500,28 +566,10 @@ class MainActivity : AppCompatActivity() {
             tilCooldown.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
         }
 
-        // 悬浮窗开启按钮 - 【修复点】使用 Material Button 风格
-        val btnFloating = Button(context, null, 0, com.google.android.material.R.style.Widget_Material3_Button_TextButton).apply {
-            text = "开启/关闭 桌面悬浮窗"
-            setOnClickListener {
-                if (!Settings.canDrawOverlays(context)) {
-                    Toast.makeText(context, "请先授予悬浮窗权限", Toast.LENGTH_LONG).show()
-                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-                    startActivity(intent)
-                } else {
-                    val serviceIntent = Intent(context, FloatingService::class.java)
-                    if (isServiceRunning(FloatingService::class.java)) {
-                        stopService(serviceIntent)
-                        Toast.makeText(context, "悬浮窗已关闭", Toast.LENGTH_SHORT).show()
-                    } else {
-                        startService(serviceIntent)
-                        Toast.makeText(context, "悬浮窗已开启", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-
         layout.addView(TextView(context).apply { text = "悬浮窗设置" })
+        layout.addView(tvFloatSize)
+        layout.addView(sliderFloatSize)
+        layout.addView(tvRestartHint)
         layout.addView(switchDefaultFloat)
         layout.addView(btnFloating)
         layout.addView(TextView(context).apply { text = "\n应用包名设置" })
@@ -533,7 +581,7 @@ class MainActivity : AppCompatActivity() {
 
         MaterialAlertDialogBuilder(context)
             .setTitle("设置")
-            .setView(layout)
+            .setView(scrollView)
             .setPositiveButton("保存") { _, _ ->
                 targetImgPackage = etImg.text.toString().trim()
                 targetVidPackage = etVid.text.toString().trim()
@@ -541,10 +589,12 @@ class MainActivity : AppCompatActivity() {
                 val newCooldownEnabled = switchCooldown.isChecked
                 val newCooldownMinutes = etCooldown.text.toString().toIntOrNull() ?: 60
                 val newDefaultFloatEnabled = switchDefaultFloat.isChecked
+                val newFloatSize = sliderFloatSize.value.roundToInt()
 
                 isCooldownEnabled = newCooldownEnabled
                 cooldownMinutes = newCooldownMinutes
                 isDefaultFloatEnabled = newDefaultFloatEnabled
+                floatSize = newFloatSize
 
                 getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                     .putString(KEY_IMG_PKG, targetImgPackage)
@@ -552,6 +602,7 @@ class MainActivity : AppCompatActivity() {
                     .putBoolean(KEY_COOLDOWN_ENABLED, newCooldownEnabled)
                     .putInt(KEY_COOLDOWN_MINUTES, newCooldownMinutes)
                     .putBoolean(KEY_DEFAULT_FLOAT_ENABLED, newDefaultFloatEnabled)
+                    .putInt(KEY_FLOAT_SIZE, newFloatSize)
                     .apply()
 
                 Toast.makeText(context, "设置已保存", Toast.LENGTH_SHORT).show()
@@ -569,7 +620,6 @@ class MainActivity : AppCompatActivity() {
         }
         return false
     }
-
 
     // --- File Logic ---
     private fun isImage(name: String) = name.endsWith(".jpg") || name.endsWith(".png") || name.endsWith(".jpeg") || name.endsWith(".webp") || name.endsWith(".bmp")

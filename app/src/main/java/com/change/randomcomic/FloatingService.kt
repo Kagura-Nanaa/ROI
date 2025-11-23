@@ -29,14 +29,18 @@ class FloatingService : Service() {
     private lateinit var floatingView: ImageView
     private lateinit var params: WindowManager.LayoutParams
 
-    private val FLOATING_WINDOW_SIZE_PX = 160
+    private val DEFAULT_FLOATING_SIZE_PX = 160
 
-    // SharedPreferences Keys (需与 Main 一致)
+    // SharedPreferences Keys
     private val PREFS_NAME = "ComicPrefs"
     private val KEY_LAST_PATH = "last_path"
     private val KEY_IMG_PKG = "img_pkg"
     private val KEY_VID_PKG = "vid_pkg"
     private val KEY_EXCLUDED_PREFIX = "excluded_"
+    private val KEY_FLOAT_SIZE = "float_size"
+    // 【新增】位置记忆 Key
+    private val KEY_FLOAT_X = "float_x"
+    private val KEY_FLOAT_Y = "float_y"
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -44,21 +48,22 @@ class FloatingService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // 读取尺寸
+        val floatSize = prefs.getInt(KEY_FLOAT_SIZE, DEFAULT_FLOATING_SIZE_PX)
+        // 【新增】读取上次保存的位置，默认为 (0, 200)
+        val initialX = prefs.getInt(KEY_FLOAT_X, 0)
+        val initialY = prefs.getInt(KEY_FLOAT_Y, 200)
+
         floatingView = ImageView(this).apply {
-            // 请确保 arrow_clockwise_fill.xml 已导入 drawable 文件夹
             setImageResource(R.drawable.arrow_clockwise_fill)
 
-            // 【修改点】 图标颜色更改为黑色 (与半透明白色背景形成高对比度)
             setColorFilter(Color.BLACK)
-
-            // 背景保持透明
             setBackgroundResource(R.drawable.fab_background)
-
-            // 调整内边距，使图标在 160x160 中居中
-            setPadding(32, 32, 32, 32)
+            setPadding(floatSize / 5, floatSize / 5, floatSize / 5, floatSize / 5)
 
             layoutParams = ViewGroup.LayoutParams(
-                FLOATING_WINDOW_SIZE_PX, FLOATING_WINDOW_SIZE_PX
+                floatSize, floatSize
             )
         }
 
@@ -69,15 +74,16 @@ class FloatingService : Service() {
         }
 
         params = WindowManager.LayoutParams(
-            FLOATING_WINDOW_SIZE_PX, FLOATING_WINDOW_SIZE_PX,
+            floatSize, floatSize,
             layoutFlag,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         )
 
         params.gravity = Gravity.TOP or Gravity.START
-        params.x = 0
-        params.y = 100
+        // 【修改】使用读取到的位置
+        params.x = initialX
+        params.y = initialY
 
         try {
             windowManager.addView(floatingView, params)
@@ -87,10 +93,10 @@ class FloatingService : Service() {
             return
         }
 
-        setupTouchListener()
+        setupTouchListener(floatSize)
     }
 
-    private fun setupTouchListener() {
+    private fun setupTouchListener(floatSize: Int) {
         floatingView.setOnTouchListener(object : View.OnTouchListener {
             private var initialX = 0
             private var initialY = 0
@@ -116,19 +122,24 @@ class FloatingService : Service() {
                             val screenWidth = windowManager.defaultDisplay.width
                             val halfScreen = screenWidth / 2
 
-                            // 悬浮窗中心点位置
                             val currentX = params.x + (v.width / 2)
 
+                            // 计算贴边后的 X 坐标
                             params.x = if (currentX <= halfScreen) {
-                                // 贴左边
                                 0
                             } else {
-                                // 贴右边
-                                screenWidth - FLOATING_WINDOW_SIZE_PX
+                                screenWidth - floatSize
                             }
 
                             windowManager.updateViewLayout(floatingView, params)
                             isDrag = false
+
+                            // 【新增】拖拽并贴边结束后，保存最新的位置 (X 和 Y)
+                            val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            prefs.edit()
+                                .putInt(KEY_FLOAT_X, params.x)
+                                .putInt(KEY_FLOAT_Y, params.y)
+                                .apply()
                         }
                         return true
                     }
@@ -150,7 +161,7 @@ class FloatingService : Service() {
         })
     }
 
-    // --- 核心逻辑 (简化适配) ---
+    // --- 核心逻辑 (保持不变) ---
 
     private fun performRandomOpen() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
