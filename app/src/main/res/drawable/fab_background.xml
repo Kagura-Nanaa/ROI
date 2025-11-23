@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <!-- 关键修改：半透明白色背景 (AARRGGBB，其中 80 是透明度) -->
+    <solid android:color="#80FFFFFF"/> 
+    <!-- 添加一个半透明深色描边以增强对比度 -->
+    <stroke android:width="2dp" android:color="#40000000"/> 
+</shape>
