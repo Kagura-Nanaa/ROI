@@ -25,6 +25,10 @@ import kotlin.math.abs
 
 class FloatingService : Service() {
 
+    companion object {
+        var isStarted = false
+    }
+
     private lateinit var windowManager: WindowManager
     private lateinit var floatingView: ImageView
     private lateinit var params: WindowManager.LayoutParams
@@ -38,33 +42,42 @@ class FloatingService : Service() {
     private val KEY_VID_PKG = "vid_pkg"
     private val KEY_EXCLUDED_PREFIX = "excluded_"
     private val KEY_FLOAT_SIZE = "float_size"
-    // 【新增】位置记忆 Key
     private val KEY_FLOAT_X = "float_x"
     private val KEY_FLOAT_Y = "float_y"
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
+
     override fun onCreate() {
         super.onCreate()
+        isStarted = true
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        // 读取尺寸
         val floatSize = prefs.getInt(KEY_FLOAT_SIZE, DEFAULT_FLOATING_SIZE_PX)
-        // 【新增】读取上次保存的位置，默认为 (0, 200)
         val initialX = prefs.getInt(KEY_FLOAT_X, 0)
         val initialY = prefs.getInt(KEY_FLOAT_Y, 200)
 
         floatingView = ImageView(this).apply {
+            // 确保 arrow_clockwise_fill 资源存在
             setImageResource(R.drawable.arrow_clockwise_fill)
 
+            // 【关键修复】将图标颜色改为黑色，以便在白色背景上可见
             setColorFilter(Color.BLACK)
+
+            // 背景保持半透明白色
             setBackgroundResource(R.drawable.fab_background)
+
+            // 【优化】防止图标变形
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+
+            // 调整内边距
             setPadding(floatSize / 5, floatSize / 5, floatSize / 5, floatSize / 5)
 
-            layoutParams = ViewGroup.LayoutParams(
-                floatSize, floatSize
-            )
+            layoutParams = ViewGroup.LayoutParams(floatSize, floatSize)
         }
 
         val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -81,7 +94,6 @@ class FloatingService : Service() {
         )
 
         params.gravity = Gravity.TOP or Gravity.START
-        // 【修改】使用读取到的位置
         params.x = initialX
         params.y = initialY
 
@@ -118,23 +130,15 @@ class FloatingService : Service() {
                         if (!isDrag) {
                             performRandomOpen()
                         } else {
-                            // 自动贴边逻辑
                             val screenWidth = windowManager.defaultDisplay.width
                             val halfScreen = screenWidth / 2
-
                             val currentX = params.x + (v.width / 2)
 
-                            // 计算贴边后的 X 坐标
-                            params.x = if (currentX <= halfScreen) {
-                                0
-                            } else {
-                                screenWidth - floatSize
-                            }
+                            params.x = if (currentX <= halfScreen) 0 else screenWidth - floatSize
 
                             windowManager.updateViewLayout(floatingView, params)
                             isDrag = false
 
-                            // 【新增】拖拽并贴边结束后，保存最新的位置 (X 和 Y)
                             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                             prefs.edit()
                                 .putInt(KEY_FLOAT_X, params.x)
@@ -161,17 +165,14 @@ class FloatingService : Service() {
         })
     }
 
-    // --- 核心逻辑 (保持不变) ---
-
+    // --- 核心逻辑 ---
     private fun performRandomOpen() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val path = prefs.getString(KEY_LAST_PATH, null)
-
         if (path == null) {
             Toast.makeText(this, "请先在主应用中选择一个文件夹", Toast.LENGTH_SHORT).show()
             return
         }
-
         if (path.startsWith("content://")) {
             performRandomOpenSaf(Uri.parse(path), prefs)
         } else {
@@ -182,18 +183,14 @@ class FloatingService : Service() {
     private fun performRandomOpenFile(pathStr: String, prefs: android.content.SharedPreferences) {
         val rootDir = File(pathStr)
         if (!rootDir.exists() || !rootDir.isDirectory) return
-
         val excludedSet = prefs.getStringSet(KEY_EXCLUDED_PREFIX + pathStr, emptySet()) ?: emptySet()
-
         val subDirs = rootDir.listFiles { file ->
             file.isDirectory && !excludedSet.contains(file.name)
         }
-
         if (subDirs == null || subDirs.isEmpty()) {
             findAndOpenFile(rootDir, prefs)
             return
         }
-
         findAndOpenFile(subDirs.random(), prefs)
     }
 
@@ -208,7 +205,6 @@ class FloatingService : Service() {
         }
         val randomFile = files.random()
         val isVid = randomFile.name.lowercase().let { it.endsWith(".mp4") || it.endsWith(".mkv") }
-
         openExternalApp(Uri.fromFile(randomFile), isVid, prefs)
     }
 
@@ -216,11 +212,9 @@ class FloatingService : Service() {
         val rootDir = DocumentFile.fromTreeUri(this, treeUri) ?: return
         val pathKey = convertUriToFilePath(treeUri)
         val excludedSet = prefs.getStringSet(KEY_EXCLUDED_PREFIX + pathKey, emptySet()) ?: emptySet()
-
         val subDirs = rootDir.listFiles().filter {
             it.isDirectory && it.name != null && !excludedSet.contains(it.name)
         }
-
         if (subDirs.isEmpty()) {
             findAndOpenSaf(rootDir, prefs)
             return
@@ -247,7 +241,6 @@ class FloatingService : Service() {
         val vidPkg = prefs.getString(KEY_VID_PKG, "com.mxtech.videoplayer.ad")
         val pkg = if (isVideo) vidPkg else imgPkg
         val type = if (isVideo) "video/*" else "image/*"
-
         try {
             val intent = Intent(Intent.ACTION_VIEW)
             intent.setDataAndType(uri, type)
@@ -275,6 +268,7 @@ class FloatingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isStarted = false
         if (::floatingView.isInitialized) {
             windowManager.removeView(floatingView)
         }

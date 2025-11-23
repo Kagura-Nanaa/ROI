@@ -1,6 +1,7 @@
 package com.change.randomcomic
 
 import android.Manifest
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -495,16 +496,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         val sliderFloatSize = Slider(context).apply {
-            valueFrom = 100f // 最小 100px
-            valueTo = 300f   // 最大 300px
-            stepSize = 10f   // 步长 10px
+            valueFrom = 100f
+            valueTo = 300f
+            stepSize = 10f
             value = floatSize.toFloat()
             addOnChangeListener { _, value, _ ->
                 tvFloatSize.text = "悬浮窗大小: ${value.roundToInt()}px"
             }
         }
 
-        // 【修改点】 提示文本更改为 "(重启软件后生效)"
         val tvRestartHint = TextView(context).apply {
             text = "(重启软件后生效)"
             textSize = 12f
@@ -522,9 +522,10 @@ class MainActivity : AppCompatActivity() {
             setPadding(10, 20, 10, 20)
         }
 
-        // 3. 悬浮窗开启按钮
+        // 3. 悬浮窗开启按钮 - 动态文字
+        val isRunning = isServiceRunning(FloatingService::class.java)
         val btnFloating = Button(context, null, 0, com.google.android.material.R.style.Widget_Material3_Button_TextButton).apply {
-            text = "开启/关闭 桌面悬浮窗"
+            text = if (isRunning) "关闭 桌面悬浮窗" else "开启 桌面悬浮窗"
             setOnClickListener {
                 val currentSize = sliderFloatSize.value.roundToInt()
                 val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -540,10 +541,12 @@ class MainActivity : AppCompatActivity() {
                     }
                     if (isServiceRunning(FloatingService::class.java)) {
                         stopService(serviceIntent)
+                        text = "开启 桌面悬浮窗"
                         Toast.makeText(context, "悬浮窗已关闭", Toast.LENGTH_SHORT).show()
                     } else {
                         stopService(serviceIntent)
                         startService(serviceIntent)
+                        text = "关闭 桌面悬浮窗"
                         Toast.makeText(context, "悬浮窗已开启", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -612,7 +615,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun isServiceRunning(serviceClass: Class<*>): Boolean {
-        val manager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         for (service in manager.getRunningServices(Int.MAX_VALUE)) {
             if (serviceClass.name == service.service.className) {
                 return true

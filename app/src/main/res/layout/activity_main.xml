@@ -13,7 +13,7 @@
         android:orientation="vertical"
         android:padding="24dp">
 
-        <!-- 顶部标题栏容器 -->
+        <!-- 顶部标题栏 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -61,7 +61,7 @@
             </com.google.android.material.chip.ChipGroup>
         </HorizontalScrollView>
 
-        <!-- 随机打开按钮 (主按钮) -->
+        <!-- 随机打开按钮 -->
         <Button
             android:id="@+id/btnRandomOpen"
             style="@style/Widget.Material3.Button.TonalButton"
@@ -90,7 +90,5 @@
         </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
-
-    <!-- 删除了 fabRandom 悬浮按钮 -->
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
