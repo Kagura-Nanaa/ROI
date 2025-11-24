@@ -11,8 +11,9 @@ android {
         applicationId = "com.change.randomcomic"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        // 【修改点】版本号升级为 2.0 (Code 顺延为 5)
+        versionCode = 5
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -52,6 +53,5 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 
-    // 用于处理文件系统路径
     implementation("androidx.documentfile:documentfile:1.0.1")
 }

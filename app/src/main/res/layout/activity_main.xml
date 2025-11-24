@@ -27,7 +27,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Surprise"
+                android:text="ROI"
                 android:textSize="24sp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium"
