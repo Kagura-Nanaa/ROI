@@ -30,6 +30,8 @@ Surprise 是一款专为漫画爱好者和本地视频收藏者设计的 Android
 
 ![IMG_20251123_182326_1](https://github.com/user-attachments/assets/fefeb6bf-42eb-4d98-9e5b-18cdfff1ce2c)
 
+![Screenrecorder-2025-11-24-10-24-36-471](https://github.com/user-attachments/assets/17c7af8a-46c8-456c-a592-8e2db6a928f1)
+
 
 3. 桌面悬浮窗 (Floating Window)
 
